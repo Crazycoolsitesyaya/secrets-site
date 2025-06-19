@@ -68,7 +68,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js"></script>
 
   <script>
-    // Your Firebase config
+    // Your Firebase config object
     const firebaseConfig = {
       apiKey: "AIzaSyCj8_HMQ_rG0M_jlE5djq6lJe6hCcWJxDo",
       authDomain: "secrets-81559.firebaseapp.com",
@@ -123,7 +123,7 @@
 
       const age = Date.now() - data.timestamp;
       if (age > 3600000) {
-        // Already expired
+        // Already expired, delete from DB
         db.ref("secrets/" + key).remove();
         return;
       }

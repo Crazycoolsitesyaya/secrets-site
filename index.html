@@ -15,14 +15,12 @@
       overflow: hidden;
       position: relative;
     }
-
     #inputContainer {
       position: absolute;
       bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
     }
-
     #secretInput {
       font-size: 1.2rem;
       padding: 10px 5px;
@@ -36,7 +34,6 @@
       margin: 0 auto;
       min-width: 320px;
     }
-
     .secret {
       position: absolute;
       white-space: pre-wrap;
@@ -45,15 +42,23 @@
       max-width: 40vw;
       opacity: 0.8;
       animation: fadeIn 1s ease-in-out;
+      pointer-events: none;
     }
-
     @keyframes fadeIn {
       from { opacity: 0; transform: scale(0.95); }
       to { opacity: 0.8; transform: scale(1); }
     }
+    #status {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      font-size: 0.8rem;
+      opacity: 0.5;
+    }
   </style>
 </head>
 <body>
+  <div id="status">Ready</div>
   <div id="inputContainer">
     <input
       id="secretInput"
@@ -63,12 +68,12 @@
     />
   </div>
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js"></script>
+  <!-- Firebase v9+ modular SDK -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getDatabase, ref, push, onChildAdded, remove } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
-  <script>
-    // Your Firebase config object
+    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyCj8_HMQ_rG0M_jlE5djq6lJe6hCcWJxDo",
       authDomain: "secrets-81559.firebaseapp.com",
@@ -80,15 +85,26 @@
     };
 
     // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    const secretsRef = db.ref("secrets");
-
+    let app, db, secretsRef;
+    const status = document.getElementById("status");
     const input = document.getElementById("secretInput");
 
+    try {
+      app = initializeApp(firebaseConfig);
+      db = getDatabase(app);
+      secretsRef = ref(db, "secrets");
+      status.textContent = "Connected to Firebase";
+    } catch (error) {
+      console.error("Firebase initialization error:", error);
+      status.textContent = "Firebase connection failed";
+      status.style.color = "red";
+    }
+
     function getRandomPosition() {
-      const x = Math.random() * (window.innerWidth - 200);
-      const y = Math.random() * (window.innerHeight - 100);
+      const maxWidth = window.innerWidth - 300; // Leave more margin
+      const maxHeight = window.innerHeight - 150; // Leave more margin
+      const x = Math.max(0, Math.random() * maxWidth);
+      const y = Math.max(0, Math.random() * maxHeight);
       return { x, y };
     }
 
@@ -96,52 +112,85 @@
       const secret = document.createElement("div");
       secret.className = "secret";
       secret.textContent = text;
-
       const { x, y } = getRandomPosition();
       secret.style.left = `${x}px`;
       secret.style.top = `${y}px`;
-
       document.body.appendChild(secret);
+      
+      // Remove secret from DOM after 60 seconds for performance
+      setTimeout(() => {
+        if (secret.parentNode) {
+          secret.remove();
+        }
+      }, 60000);
     }
 
     // Add secret with timestamp
-    input.addEventListener("keydown", function (e) {
+    input.addEventListener("keydown", async function (e) {
       if (e.key === "Enter" && input.value.trim() !== "") {
+        const secretText = input.value.trim();
         const secretData = {
-          text: input.value.trim(),
+          text: secretText,
           timestamp: Date.now()
         };
-        secretsRef.push(secretData);
-        input.value = "";
+        
+        try {
+          if (secretsRef) {
+            await push(secretsRef, secretData);
+            status.textContent = "Secret added!";
+            setTimeout(() => status.textContent = "Connected to Firebase", 2000);
+          } else {
+            // Fallback: show secret locally if Firebase fails
+            createSecret(secretText);
+            status.textContent = "Added locally (Firebase unavailable)";
+          }
+          input.value = "";
+        } catch (error) {
+          console.error("Error adding secret:", error);
+          // Fallback: show secret locally
+          createSecret(secretText);
+          input.value = "";
+          status.textContent = "Added locally (Firebase error)";
+          status.style.color = "orange";
+        }
       }
     });
 
-    // Listen for new secrets
-    secretsRef.on("child_added", function(snapshot) {
-      const data = snapshot.val();
-      const key = snapshot.key;
-
-      const age = Date.now() - data.timestamp;
-      if (age > 3600000) {
-        // Already expired, delete from DB
-        db.ref("secrets/" + key).remove();
-        return;
-      }
-
-      createSecret(data.text);
-
-      // Auto-remove after remaining time
-      const remaining = 3600000 - age;
-      setTimeout(() => {
-        db.ref("secrets/" + key).remove();
-        const allSecrets = document.querySelectorAll(".secret");
-        allSecrets.forEach((el) => {
-          if (el.textContent === data.text) {
-            el.remove();
+    // Listen for new secrets from Firebase
+    if (secretsRef) {
+      try {
+        onChildAdded(secretsRef, (snapshot) => {
+          const data = snapshot.val();
+          const key = snapshot.key;
+          const age = Date.now() - data.timestamp;
+          
+          // Skip if secret is older than 1 hour
+          if (age > 3600000) {
+            remove(ref(db, `secrets/${key}`));
+            return;
+          }
+          
+          createSecret(data.text);
+          
+          // Auto-remove from database after remaining time
+          const remaining = 3600000 - age;
+          if (remaining > 0) {
+            setTimeout(() => {
+              remove(ref(db, `secrets/${key}`));
+            }, remaining);
           }
         });
-      }, remaining);
-    });
+      } catch (error) {
+        console.error("Error setting up Firebase listener:", error);
+        status.textContent = "Firebase listener failed";
+        status.style.color = "red";
+      }
+    }
+
+    // Add some test functionality for debugging
+    window.testSecret = function() {
+      createSecret("Test secret - Firebase working!");
+    };
   </script>
 </body>
 </html>

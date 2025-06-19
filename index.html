@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Secrets</title>
+  <style>
+    body {
+      background: black;
+      color: white;
+      font-family: monospace;
+      margin: 0;
+      padding: 2rem;
+    }
+    #secretInput {
+      background: none;
+      border: none;
+      border-bottom: 1px solid white;
+      color: white;
+      font-size: 1.2rem;
+      width: 100%;
+      outline: none;
+      margin-top: 2rem;
+    }
+    .secret {
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="secrets"></div>
+  <input
+    id="secretInput"
+    type="text"
+    placeholder="Type your secret and press Enter..."
+    autofocus
+  />
+
+  <script>
+    const secretsDiv = document.getElementById("secrets");
+    const input = document.getElementById("secretInput");
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && input.value.trim() !== "") {
+        const secretText = input.value.trim();
+        const p = document.createElement("div");
+        p.className = "secret";
+        p.textContent = secretText;
+        secretsDiv.appendChild(p);
+        input.value = "";
+      }
+    });
+  </script>
+</body>
+</html>
